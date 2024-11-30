@@ -22,14 +22,16 @@ def stacking_results(model_results):
         return pd.DataFrame() # Return an empty DataFrame on error
 
 # build the boundings of a specific class
-def boundings_builder(image, df):
+def boundings_builder(image ,  df):
     if image is None or df.empty:
         return image
 
     for _, row in df.iterrows():
-        x1, y1, x2, y2, label = row["xmin"], row["ymin"], row["xmax"], row["ymax"], row["class"]
-        cv2.rectangle(image, (int(x1), int(y1)), (int(x2), int(y2)), (139, 69, 19), 2)
-        cv2.putText(image, str(label), (int(x1), int(y1 - 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (139, 69, 19), 2, cv2.LINE_AA)
+        x1, y1, x2, y2 = row["xmin"], row["ymin"], row["xmax"], row["ymax"]
+        #calculate center coordinates
+        center_x = int((x1 + x2) / 2)
+        center_y = int((y1 + y2) / 2)
+        cv2.circle(image, (center_x, center_y), 5, (139, 69, 19), -1) # -1 fills the circle
 
     return image
 
