@@ -14,7 +14,7 @@ pathlib.PosixPath = pathlib.WindowsPath
 def load_models():
     model = torch.hub.load('Ultralytics/yolov5', 'custom', "last.pt", force_reload=True, trust_repo=True)
     return model
-
+model = load_models()
 # turning the result into a data frame with the predicted volume
 def stacking_results(model_results):
     try:
@@ -54,7 +54,7 @@ objp = np.zeros((CHECKERBOARD[0] * CHECKERBOARD[1], 3), np.float32)
 objp[:, :2] = np.mgrid[0:CHECKERBOARD[0], 0:CHECKERBOARD[1]].T.reshape(-1, 2)
 
 # Calibration from the video 
-http = 'http://192.168.1.40:8080/video'
+http = 'http://192.168.137.186:8080/video'
 cap = cv2.VideoCapture(http)
 
 if not cap.isOpened():
@@ -150,22 +150,37 @@ cv2.destroyAllWindows()
 
 
 # object detection 
-model = load_models()
-capture = cv2.VideoCapture("http://192.168.1.40:8080/video")
+capture = cv2.VideoCapture("http://192.168.137.186:8080/video")
+capture2 = cv2.VideoCapture("http://192.168.137.241:8080/video")
 if not capture.isOpened():
     print("Error opening video stream.")
     exit()
+if not capture2.isOpened():
+    print("Error opening video stream.")
+    exit()
+
 while True:
     ret, frame = capture.read()
-    if not ret:
+    ret2, frame2 = capture2.read()
+    if not ret or not ret2:
         print("Error reading frame.")
         break
 
     results = model(frame)
+    results2 = model(frame2)
     df = stacking_results(results)
+    df2 = stacking_results(results2)
     image = boundings_builder(frame, df)
+    image2 = boundings_builder(frame2, df2)
+    #adjust the shape of the image to small window
+    image = cv2.resize(image, (800, 450))
+    image2 = cv2.resize(image2, (800, 450))
+
     cv2.imshow('livestream', image)
+    cv2.imshow('livestream2', image2)
     if cv2.waitKey(1) == ord("q"):
         break
+    
 capture.release()
+capture2.release()
 cv2.destroyAllWindows()

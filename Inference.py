@@ -37,7 +37,7 @@ def boundings_builder(image ,  df):
 
 # main code
 model = load_models()
-capture = cv2.VideoCapture("http://192.168.1.40:8080/video")
+capture = cv2.VideoCapture("http://192.168.141.191:8080/video")
 
 if not capture.isOpened():
     print("Error opening video stream.")
