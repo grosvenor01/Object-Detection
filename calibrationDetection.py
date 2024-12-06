@@ -10,7 +10,7 @@ import threading
 #bonus code (usedfor the relatives path finding)
 temp = pathlib.PosixPath
 pathlib.PosixPath = pathlib.WindowsPath
-
+cams_Res=[]
 # models loading
 def load_models():
     model = torch.hub.load('Ultralytics/yolov5', 'custom', "last.pt", force_reload=True, trust_repo=True)
@@ -119,11 +119,7 @@ def calibrate_camera(name , http , CHECKERBOARD ,  iteration ):
         # Exit on pressing 'q'
         if cv2.waitKey(10) & 0xFF == ord('q'):
             break
-
-    cap.release()
-    cv2.destroyAllWindows()
-
-    return ret, mtx, dist, rvecs, tvecs
+    cams_Res.append([ret, mtx, dist, rvecs, tvecs])
 
 def afficher_calib(mtx,dist):
     print("\nMatrice de la caméra :")
@@ -166,10 +162,13 @@ cam1.join()
 cam2.join()
 # Display calibration results
 
+cam1 = cams_Res[0]
+cam2 = cams_Res[1]
 afficher_calib(cam1[1] , cam1[2])
 afficher_calib(cam2[1] , cam2[2])
 
 capture = cv2.VideoCapture("http://192.168.137.190:8080/video")
+capture2 = cv2.VideoCapture("http://192.168.137.190:8080/video")
 if not capture.isOpened():
     print("Error opening video stream.")
     exit()
