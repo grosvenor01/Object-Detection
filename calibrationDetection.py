@@ -5,6 +5,7 @@ import pandas as pd
 import pathlib
 from IPython.display import display
 import time
+import threading
 
 #bonus code (usedfor the relatives path finding)
 temp = pathlib.PosixPath
@@ -39,119 +40,136 @@ def boundings_builder(image ,  df):
 
     return image
 
-# Checkerboard dimensions
+def calibrate_camera(name , http , CHECKERBOARD ,  iteration ):
+    # Criteria for corner refinement
+    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
+
+    # Vectors to store 3D (real-world) and 2D (image) points
+    objpoints = []  # 3D points in real-world space
+    imgpoints = []  # 2D points in image plane
+
+    # Real-world 3D coordinates for the checkerboard
+    objp = np.zeros((CHECKERBOARD[0] * CHECKERBOARD[1], 3), np.float32)
+    objp[:, :2] = np.mgrid[0:CHECKERBOARD[0], 0:CHECKERBOARD[1]].T.reshape(-1, 2)
+
+    # Calibration from the video 
+    cap = cv2.VideoCapture(http)
+
+    if not cap.isOpened():
+        print('Error opening video capture')
+        exit(0)
+
+    # Timing to control frame capture
+    last_capture_time = time.time()
+    captured_images = 0
+
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            print("Error reading frame")
+            break
+
+        # Get the current time
+        current_time = time.time()
+
+        # Capture a frame every 3 seconds
+        if current_time - last_capture_time >= 3:
+            last_capture_time = current_time
+
+            # Convert the frame to grayscale
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+            # Detect checkerboard corners
+            ret, corners = cv2.findChessboardCorners(
+                gray, CHECKERBOARD,
+                cv2.CALIB_CB_ADAPTIVE_THRESH + cv2.CALIB_CB_FAST_CHECK + cv2.CALIB_CB_NORMALIZE_IMAGE
+            )
+
+            # If corners are detected
+            if ret:
+                print(f"Checkerboard detected for image {captured_images + 1}")
+                objpoints.append(objp)
+
+                # Refine corner locations
+                corners2 = cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1), criteria)
+                imgpoints.append(corners2)
+
+                # Draw and display the corners on the frame
+                frame_with_corners = cv2.drawChessboardCorners(frame, CHECKERBOARD, corners2, ret)
+                captured_images += 1
+                print(f"{captured_images} got ")
+                # If 10 valid images are captured, perform calibration
+                if captured_images == iteration:
+                    print("Performing calibration...")
+                    # Perform camera calibration
+                    ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, gray.shape[::-1], None, None)
+                    break
+
+                    
+
+        # Display the live feed
+        cv2.namedWindow(name, cv2.WINDOW_NORMAL)
+
+        # Resize the window to a specific size
+        cv2.resizeWindow(name, 600, 400)  # Set desired width and height
+
+        # Show the frame
+        cv2.imshow(name, frame)
+
+        # Exit on pressing 'q'
+        if cv2.waitKey(10) & 0xFF == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+    return ret, mtx, dist, rvecs, tvecs
+
+def afficher_calib(mtx,dist):
+    print("\nMatrice de la caméra :")
+    print(mtx)
+    print("\nCoefficients de distorsion :")
+    print(dist)
+
+
+    # Extract intrinsic parameters
+    fx = mtx[0, 0]
+    fy = mtx[1, 1]
+    cx = mtx[0, 2]
+    cy = mtx[1, 2]
+
+                            # Display results
+    print("\nFocal lengths (in pixels):")
+    print(f"fx = {fx}")
+    print(f"fy = {fy}")
+    print("\nOptical center (in pixels):")
+    print(f"cx = {cx}")
+    print(f"cy = {cy}")
+
+
+http1 = 'http://192.168.137.244:8080/video'
+http2 = 'https://192.168.137.44:8080/video'
+
 CHECKERBOARD = (9, 7)
-
-# Criteria for corner refinement
-criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
-
-# Vectors to store 3D (real-world) and 2D (image) points
-objpoints = []  # 3D points in real-world space
-imgpoints = []  # 2D points in image plane
-
-# Real-world 3D coordinates for the checkerboard
-objp = np.zeros((CHECKERBOARD[0] * CHECKERBOARD[1], 3), np.float32)
-objp[:, :2] = np.mgrid[0:CHECKERBOARD[0], 0:CHECKERBOARD[1]].T.reshape(-1, 2)
-
-# Calibration from the video 
-http = 'http://192.168.1.40:8080/video'
-cap = cv2.VideoCapture(http)
-
-if not cap.isOpened():
-    print('Error opening video capture')
-    exit(0)
-
-# Timing to control frame capture
-last_capture_time = time.time()
-captured_images = 0
-
-while cap.isOpened():
-    ret, frame = cap.read()
-    if not ret:
-        print("Error reading frame")
-        break
-
-    # Get the current time
-    current_time = time.time()
-
-    # Capture a frame every 3 seconds
-    if current_time - last_capture_time >= 3:
-        last_capture_time = current_time
-
-        # Convert the frame to grayscale
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
-        # Detect checkerboard corners
-        ret, corners = cv2.findChessboardCorners(
-            gray, CHECKERBOARD,
-            cv2.CALIB_CB_ADAPTIVE_THRESH + cv2.CALIB_CB_FAST_CHECK + cv2.CALIB_CB_NORMALIZE_IMAGE
-        )
-
-        # If corners are detected
-        if ret:
-            print(f"Checkerboard detected for image {captured_images + 1}")
-            objpoints.append(objp)
-
-            # Refine corner locations
-            corners2 = cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1), criteria)
-            imgpoints.append(corners2)
-
-            # Draw and display the corners on the frame
-            frame_with_corners = cv2.drawChessboardCorners(frame, CHECKERBOARD, corners2, ret)
-            captured_images += 1
-            print(f"{captured_images} got ")
-            # If 10 valid images are captured, perform calibration
-            if captured_images == 10:
-                print("Performing calibration...")
-                # Perform camera calibration
-                ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, gray.shape[::-1], None, None)
-                if ret:
-                    # Display calibration results
-                    print("\nMatrice de la caméra :")
-                    print(mtx)
-                    print("\nCoefficients de distorsion :")
-                    print(dist)
-                    print("\nVecteurs de rotation :")
-                    print(rvecs)
-                    print("\nVecteurs de translation :")
-                    print(tvecs)
-
-                    # Extract intrinsic parameters
-                    fx = mtx[0, 0]
-                    fy = mtx[1, 1]
-                    cx = mtx[0, 2]
-                    cy = mtx[1, 2]
-
-                    # Display results
-                    print("\nFocal lengths (in pixels):")
-                    print(f"fx = {fx}")
-                    print(f"fy = {fy}")
-                    print("\nOptical center (in pixels):")
-                    print(f"cx = {cx}")
-                    print(f"cy = {cy}")
-
-                break
-
-    # Display the live feed
-    cv2.namedWindow("Live Feed", cv2.WINDOW_NORMAL)
-
-    # Resize the window to a specific size
-    cv2.resizeWindow("Live Feed", 1740, 880)  # Set desired width and height
-
-    # Show the frame
-    cv2.imshow("Live Feed", frame)
-
-    # Exit on pressing 'q'
-    if cv2.waitKey(10) & 0xFF == ord('q'):
-        break
-
-cap.release()
-cv2.destroyAllWindows()
-
+iteration = 10 
 
 # object detection 
 model = load_models()
-capture = cv2.VideoCapture("http://192.168.1.40:8080/video")
+
+cam1 = threading.Thread(target=calibrate_camera, args=("cam1" , http1, CHECKERBOARD, 10))
+cam2 = threading.Thread(target=calibrate_camera, args=("cam2",http2, CHECKERBOARD, 10))
+
+cam1.start()
+cam2.start()
+
+cam1.join()
+cam2.join()
+# Display calibration results
+
+afficher_calib(cam1[1] , cam1[2])
+afficher_calib(cam2[1] , cam2[2])
+
+capture = cv2.VideoCapture("http://192.168.137.190:8080/video")
 if not capture.isOpened():
     print("Error opening video stream.")
     exit()
@@ -160,7 +178,6 @@ while True:
     if not ret:
         print("Error reading frame.")
         break
-
     results = model(frame)
     df = stacking_results(results)
     image = boundings_builder(frame, df)
