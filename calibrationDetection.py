@@ -11,6 +11,7 @@ import threading
 temp = pathlib.PosixPath
 pathlib.PosixPath = pathlib.WindowsPath
 cams_Res=[]
+
 # models loading
 def load_models():
     model = torch.hub.load('Ultralytics/yolov5', 'custom', "last.pt", force_reload=True, trust_repo=True)
@@ -26,7 +27,7 @@ def stacking_results(model_results):
         return pd.DataFrame() # Return an empty DataFrame on error
 
 # build the boundings of a specific class
-def boundings_builder(image ,  df):
+def boundings_builder(name , image ,  df):
     if image is None or df.empty:
         return image
 
@@ -35,7 +36,7 @@ def boundings_builder(image ,  df):
         #calculate center coordinates
         center_x = int((x1 + x2) / 2)
         center_y = int((y1 + y2) / 2)
-        print(f"x = {center_x}     y= {center_y}")
+        print(f"X{name} = {center_x}     y{name}= {center_y}")
         cv2.circle(image, (center_x, center_y), 5, (139, 69, 19), -1) # -1 fills the circle
 
     return image
@@ -142,32 +143,6 @@ def afficher_calib(mtx,dist):
     print(f"cx = {cx}")
     print(f"cy = {cy}")
 
-
-http1 = 'http://192.168.137.244:8080/video'
-http2 = 'https://192.168.137.44:8080/video'
-
-CHECKERBOARD = (9, 7)
-iteration = 10 
-
-# object detection 
-model = load_models()
-
-cam1 = threading.Thread(target=calibrate_camera, args=("cam1" , http1, CHECKERBOARD, 10))
-cam2 = threading.Thread(target=calibrate_camera, args=("cam2",http2, CHECKERBOARD, 10))
-
-cam1.start()
-cam2.start()
-
-cam1.join()
-cam2.join()
-
-# Display calibration results
-cam1 = cams_Res[0]
-cam2 = cams_Res[1]
-
-afficher_calib(cam1[1] , cam1[2])
-afficher_calib(cam2[1] , cam2[2])
-
 def detect_object(name , http):
     capture = cv2.VideoCapture(http)
     if not capture.isOpened():
@@ -182,16 +157,40 @@ def detect_object(name , http):
             break
         results = model(frame)
         df = stacking_results(results)
-        image = boundings_builder(frame, df)
+        image = boundings_builder(name , frame, df)
         cv2.imshow(name, image)
         if cv2.waitKey(1) == ord("q"):
             break
     time.sleep(10)
 
+
+# initialization
+http1 = 'http://192.168.137.244:8080/video'
+http2 = 'https://192.168.137.44:8080/video'
+CHECKERBOARD = (9, 7)
+iteration = 10 
+
+# load object detection model detection 
+model = load_models()
+
+# cameras calibration multihthreadings
+cam1 = threading.Thread(target=calibrate_camera, args=("cam1" , http1, CHECKERBOARD, 10))
+cam2 = threading.Thread(target=calibrate_camera, args=("cam2",http2, CHECKERBOARD, 10))
+cam1.start()
+cam2.start()
+cam1.join()
+cam2.join()
+
+# Display calibration results
+cam1 = cams_Res[0]
+cam2 = cams_Res[1]
+afficher_calib(cam1[1] , cam1[2])
+afficher_calib(cam2[1] , cam2[2])
+
+# object detection multithreadings
 T1 = threading.Thread(target=detect_object, args=("camera 1" , http1,))
 T2 = threading.Thread(target=detect_object, args=("camera 2" , http2,))
 T1.start()
 T2.start()
-
 T1.join()
 T2.join()
