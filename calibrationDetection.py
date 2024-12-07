@@ -160,28 +160,38 @@ cam2.start()
 
 cam1.join()
 cam2.join()
-# Display calibration results
 
+# Display calibration results
 cam1 = cams_Res[0]
 cam2 = cams_Res[1]
+
 afficher_calib(cam1[1] , cam1[2])
 afficher_calib(cam2[1] , cam2[2])
 
-capture = cv2.VideoCapture("http://192.168.137.190:8080/video")
-capture2 = cv2.VideoCapture("http://192.168.137.190:8080/video")
-if not capture.isOpened():
-    print("Error opening video stream.")
-    exit()
-while True:
-    ret, frame = capture.read()
-    if not ret:
-        print("Error reading frame.")
-        break
-    results = model(frame)
-    df = stacking_results(results)
-    image = boundings_builder(frame, df)
-    cv2.imshow('livestream', image)
-    if cv2.waitKey(1) == ord("q"):
-        break
-capture.release()
-cv2.destroyAllWindows()
+def detect_object(name , http):
+    capture = cv2.VideoCapture(http)
+    if not capture.isOpened():
+        print("Error opening video stream.")
+        exit()
+    cv2.namedWindow(name, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(name, 600, 400)
+    while True:
+        ret, frame = capture.read()
+        if not ret:
+            print("Error reading frame.")
+            break
+        results = model(frame)
+        df = stacking_results(results)
+        image = boundings_builder(frame, df)
+        cv2.imshow(name, image)
+        if cv2.waitKey(1) == ord("q"):
+            break
+    time.sleep(10)
+
+T1 = threading.Thread(target=detect_object, args=("camera 1" , http1,))
+T2 = threading.Thread(target=detect_object, args=("camera 2" , http2,))
+T1.start()
+T2.start()
+
+T1.join()
+T2.join()
