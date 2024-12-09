@@ -17,7 +17,7 @@ cams_Res=[]
 def load_models():
     model = torch.hub.load('Ultralytics/yolov5', 'custom', "last.pt", force_reload=True, trust_repo=True)
     return model
-
+model = load_models()
 # turning the result into a data frame with the predicted volume
 def stacking_results(model_results):
     try:
@@ -35,7 +35,8 @@ def boundings_builder(name , image ,  df):
         #calculate center coordinates
         center_x = int((x1 + x2) / 2)
         center_y = int((y1 + y2) / 2)
-        print(f"X{name} = {center_x}     y{name}= {center_y}")
+        st.write("Cordonné 2d d'objet")
+        st.write(f"X{name} = {center_x}     y{name}= {center_y}")
         cv2.circle(image, (center_x, center_y), 5, (139, 69, 19), -1) # -1 fills the circle
 
     return image
@@ -133,6 +134,25 @@ def afficher_calib(camera_name,mtx, dist):
     st.write(f"- cx = {cx:.2f}")
     st.write(f"- cy = {cy:.2f}")
 
+async def detect_object(name, http, placeholder):
+    capture = cv2.VideoCapture(http)
+    if not capture.isOpened():
+        print("Error opening video stream.")
+        exit()
+    while True:
+        ret, frame = capture.read()
+        if not ret:
+            print("Error reading frame.")
+            break
+        results = model(frame)
+        df = stacking_results(results)
+        image = boundings_builder(name , frame, df)
+        img_pil = Image.fromarray(image)
+        placeholder.image(img_pil, channels="RGB", use_container_width=True)
+        if cv2.waitKey(1) == ord("q"):
+            break
+        await asyncio.sleep(0.05)
+
 st.title("Calibration Caméras")
 # Input parameters
 with st.form("parameters"):
@@ -166,6 +186,17 @@ async def main():
 
         with col2:
             afficher_calib("camera 2",cams_Res[1][1] , cams_Res[1][2])
+        
+        with col1:
+            st.subheader("Camera 1 Feed")
+            placeholder1 = st.empty()
+        with col2:
+            st.subheader("Camera 2 Feed")
+            placeholder2 = st.empty()
+        await asyncio.gather(
+            detect_object("camera 1" , address_camera1 ,placeholder1),
+            detect_object("camera 2", address_camera1 ,placeholder2)
+        )
 
 if __name__ == "__main__":
     asyncio.run(main())
