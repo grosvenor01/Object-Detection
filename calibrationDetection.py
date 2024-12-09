@@ -166,7 +166,7 @@ def detect_object(name , http):
 
 # initialization
 http1 = 'http://192.168.137.244:8080/video'
-http2 = 'https://192.168.137.44:8080/video'
+http2 = 'https://192.168.137.244:8080/video'
 CHECKERBOARD = (9, 7)
 iteration = 10 
 
