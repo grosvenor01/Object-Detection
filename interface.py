@@ -112,26 +112,26 @@ async def display_camera_feed(camera_source, camera_name, placeholder , CHECKERB
         if cap:
             cap.release()
 
-def afficher_calib(mtx,dist):
-    print("\nMatrice de la caméra :")
-    print(mtx)
-    print("\nCoefficients de distorsion :")
-    print(dist)
+def afficher_calib(camera_name,mtx, dist):
+    st.write(f"**Résultats de la calibration - Caméra {camera_name}:**")
+    st.write("\n**Matrice de la caméra :**")
+    st.write(mtx)
 
+    st.write("\n**Coefficients de distorsion :**")
+    st.write(dist)
 
-    # Extract intrinsic parameters
     fx = mtx[0, 0]
     fy = mtx[1, 1]
     cx = mtx[0, 2]
     cy = mtx[1, 2]
 
-                            # Display results
-    print("\nFocal lengths (in pixels):")
-    print(f"fx = {fx}")
-    print(f"fy = {fy}")
-    print("\nOptical center (in pixels):")
-    print(f"cx = {cx}")
-    print(f"cy = {cy}")
+    st.write("\n**Paramètres intrinsèques :**")
+    st.write(f"**Distances focales (en pixels) :**")
+    st.write(f"- fx = {fx:.2f}")
+    st.write(f"- fy = {fy:.2f}")
+    st.write(f"**Centre optique (en pixels) :**")
+    st.write(f"- cx = {cx:.2f}")
+    st.write(f"- cy = {cy:.2f}")
 
 st.title("Calibration Caméras")
 # Input parameters
@@ -159,7 +159,13 @@ async def main():
             display_camera_feed(address_camera1,"cam1",placeholder1,CHECKERBOARD ,iteration),
             display_camera_feed(address_camera2,"cam2",placeholder2,CHECKERBOARD,iteration)
         )
+        col1, col2 = st.columns(2)  # Create two columns
+
+        with col1:
+            afficher_calib("camera 1",cams_Res[0][1] , cams_Res[0][2])
+
+        with col2:
+            afficher_calib("camera 2",cams_Res[1][1] , cams_Res[1][2])
 
 if __name__ == "__main__":
     asyncio.run(main())
-
