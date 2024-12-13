@@ -183,7 +183,7 @@ def object_detection(name, http, num, cam1_results, cam2_results):
             if points:
                 x, y, radius, area = points[0]
                 cv2.circle(frame, (x, y), radius, (0, 0, 255), 2)
-                cv2.putText(frame, f"{x}, {y}", (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 0), 2)
+                cv2.putText(frame, f"{x}, {y}", (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
 
                 if num == 1:
                     pos_cam1 = (x, y)
@@ -201,7 +201,7 @@ def object_detection(name, http, num, cam1_results, cam2_results):
                     b = distance_cameras 
 
                     x1, y1, z = calculate_3d_position(ul, vl, ur, fx, fy, b, ox, oy)
-                    cv2.putText(frame, f"{x1:.2f}, {y1:.2f}, {z:.2f}", (x , y), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 0), 2)
+                    cv2.putText(frame, f"{x1:.2f}, {y1:.2f}, {z:.2f}", (x+20 , y+20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
 
         cv2.imshow(f"Image : {name}", frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -217,6 +217,28 @@ def calculer_mi_distance(cam1_extr, cam2_extr):
     z =mid_point[2][0]/2
     return x , y ,z
 
+def check_camera_moved(reference_frame, current_frame, threshold=20):
+    # Conversion en niveaux de gris
+    ref_gray = cv2.cvtColor(reference_frame, cv2.COLOR_BGR2GRAY)
+    curr_gray = cv2.cvtColor(current_frame, cv2.COLOR_BGR2GRAY)
+    
+    # Détection des points caractéristiques (ORB)
+    orb = cv2.ORB_create()
+    kp1, des1 = orb.detectAndCompute(ref_gray, None)
+    kp2, des2 = orb.detectAndCompute(curr_gray, None)
+    
+    # Correspondance des points caractéristiques
+    bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+    matches = bf.match(des1, des2)
+    matches = sorted(matches, key=lambda x: x.distance)
+    
+    # Calcul de la distance moyenne des points correspondants
+    distances = [match.distance for match in matches]
+    avg_distance = np.mean(distances) if distances else float('inf')
+    print(f"{avg_distance} , {threshold}")
+    # Si la distance moyenne dépasse le seuil, la caméra a bougé
+    return avg_distance > threshold
+    
 
 st.title("Calibration Caméras")
 # Input parameters
@@ -231,6 +253,7 @@ with st.form("parameters"):
 
 
 if submitted : 
+
     CHECKERBOARD = (int(checkboard_size.split("x")[0]), int(checkboard_size.split("x")[1]))
     iteration = nb_images
     b = distance_cameras
@@ -269,6 +292,40 @@ if submitted :
     
     a , b ,c = calculer_mi_distance(cam1_results,cam2_results)
     st.write(f"la position de camera a mi distance est :({a} , {b} , {c})" )
+
+    if model_case == "fixe camera":
+        def monitor_and_recalibrate(camera_name, address, cam_results, cam_index):
+            reference_frame = None
+            
+            # Capture d'une image de référence lors du premier calibrage
+            cap = cv2.VideoCapture(address)
+            if cap.isOpened():
+                ret, reference_frame = cap.read()
+                cap.release()
+            
+            while True:
+                cap = cv2.VideoCapture(address)
+                if not cap.isOpened():
+                    break
+                
+                ret, current_frame = cap.read()
+                cap.release()
+                
+                if ret and reference_frame is not None:
+                    if check_camera_moved(reference_frame, current_frame):
+                        logging.info(f"{camera_name} moved. Recalibrating...")
+                        calibrate_camera(camera_name, address, CHECKERBOARD, iteration)
+                        with cams_res_lock:
+                            cams_Res[cam_index] = cams_Res[-1]
+                            cams_Res.pop()
+                        # Mettre à jour la nouvelle image de référence
+                        reference_frame = current_frame
+                        time.sleep(100)
+
+        # Lancer les threads de surveillance pour chaque caméra
+        threading.Thread(target=monitor_and_recalibrate, args=("cam1", address_camera1, cam1_results, 0), daemon=True).start()
+        threading.Thread(target=monitor_and_recalibrate, args=("cam2", address_camera2, cam2_results, 1), daemon=True).start()
+        
     # object detection multithreadings"""
     T1 = threading.Thread(target=object_detection, args=("Camera 1", address_camera1, 1 , cam1_results,cam2_results))
     T2 = threading.Thread(target=object_detection, args=("Camera 2", address_camera2, 2 , cam1_results,cam2_results))
