@@ -1,17 +1,13 @@
 import streamlit as st
 import numpy as np
-import torch
 import cv2
 import numpy as np
-import pandas as pd
 import pathlib
 import time
 import threading
-from PIL import Image
-import asyncio
 import streamlit as st
 import logging
-import sys
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -20,16 +16,17 @@ temp = pathlib.PosixPath
 pathlib.PosixPath = pathlib.WindowsPath
 cams_Res=[]
 coords = []
+
+pos_cam1 = None 
+pos_cam2 = None 
+lock = threading.Lock()
 cams_res_lock = threading.Lock()
 coords_lock = threading.Lock()
-global center_x, center_y
+
+
 # HSV range for pink (adjust these values if needed)
 lo = np.array([140, 50, 50])  # Lower bound (Hue, Saturation, Value)
 hi = np.array([170, 255, 255])  # Upper bound (Hue, Saturation, Value)
-# models loading
-import torch
-import logging
-
 
 def calculate_3d_position(uL, vL, uR, fx, fy, b, ox, oy):
     if uL == uR:
@@ -72,7 +69,7 @@ def calibrate_camera(name , http , CHECKERBOARD ,  iteration ):
         current_time = time.time()
 
         # Capture a frame every 3 seconds
-        if current_time - last_capture_time >= 1:
+        if current_time - last_capture_time >= 3:
             last_capture_time = current_time
 
             # Convert the frame to grayscale
@@ -163,40 +160,54 @@ def detect_inrange(image, surface_min, surface_max):
         
     return hsv, mask, points
 
-def object_detection(name, http, num):
+def object_detection(name, http, num, cam1_results, cam2_results):
+    global pos_cam1
+    global pos_cam2
     cap = cv2.VideoCapture(http)
     if not cap.isOpened():
         print(f"Erreur: Impossible d'ouvrir la caméra/flux vidéo {http}")
-        return  # Return early if camera/stream can't be opened
+        return
 
-    # Define the desired output resolution (adjust as needed)
-    output_width = 640  # Example: 640 pixels
-    output_height = 480 # Example: 480 pixels
+    output_width = 640
+    output_height = 480
 
     while True:
         ret, frame = cap.read()
         if not ret:
             break
 
-        # Resize the frame
         frame = cv2.resize(frame, (output_width, output_height))
+        hsv, mask, points = detect_inrange(frame, 200, 300)
 
-        cv2.flip(frame, 1, frame)
-        hsv, mask, points = detect_inrange(frame, 200, 300)  # Assuming detect_inrange is defined elsewhere
+        with lock: # Protect shared variables with a lock
+            if points:
+                x, y, radius, area = points[0]
+                cv2.circle(frame, (x, y), radius, (0, 0, 255), 2)
+                cv2.putText(frame, f"{x}, {y}", (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 0), 2)
 
-        if points:
-            x, y, radius, area = points[0]
-            cv2.circle(frame, (x, y), radius, (0, 0, 255), 2)
-            cv2.putText(frame, f"{x}, {y}", (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 0), 2)
+                if num == 1:
+                    pos_cam1 = (x, y)
+                else:
+                    pos_cam2 = (x, y)
+
+                # Calculate 3D position ONLY if both cameras have detected objects
+                if pos_cam1 is not None  and pos_cam2 is not None:
+                    ul, vl = pos_cam1
+                    ur, vr = pos_cam2
+                    fx = cam1_results[1][0, 0]
+                    fy = cam1_results[1][1, 1]
+                    ox = cam1_results[1][0, 2]
+                    oy = cam1_results[1][1, 2]
+                    b = distance_cameras 
+
+                    x1, y1, z = calculate_3d_position(ul, vl, ur, fx, fy, b, ox, oy)
+                    cv2.putText(frame, f"{x1:.2f}, {y1:.2f}, {z:.2f}", (x , y), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 0), 2)
 
         cv2.imshow(f"Image : {name}", frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
 def calculer_mi_distance(cam1_extr, cam2_extr):
-    """
-    Calculate the midpoint between two camera projection centers.
-    """
     tvec1 = cam1_extr[4]  # Translation vector for camera 1
     tvec2 = cam2_extr[4]  # Translation vector for camera 2
 
@@ -206,6 +217,7 @@ def calculer_mi_distance(cam1_extr, cam2_extr):
     z =mid_point[2][0]/2
     return x , y ,z
 
+
 st.title("Calibration Caméras")
 # Input parameters
 with st.form("parameters"):
@@ -214,6 +226,7 @@ with st.form("parameters"):
     checkboard_size = st.text_input("Taille du checkboard (ex: '9x6')", value="9x6")
     address_camera1 = st.text_input("Adresse caméra 1 ", value="http://...")
     address_camera2 = st.text_input("Adresse caméra 2 ", value="http://...")
+    model_case = st.selectbox("calibration type" , ["fixe object" , "fixe camera"])
     submitted = st.form_submit_button("Valider")
 
 
@@ -229,13 +242,15 @@ if submitted :
         st.subheader("Camera 2 Feed")
         placeholder2 = st.empty()
 
-    """    # cameras calibration multihthreadings
+    # cameras calibration multihthreadings
     cam1 = threading.Thread(target=calibrate_camera, args=("cam1" , address_camera1, CHECKERBOARD, iteration))
     cam2 = threading.Thread(target=calibrate_camera, args=("cam2",address_camera2, CHECKERBOARD, iteration))
     cam1.start()
     cam2.start()
     cam1.join()
     cam2.join()
+
+
     with cams_res_lock:
         if len(cams_Res) < 2:
             logging.error("Camera calibration failed for one or both cameras.")
@@ -245,45 +260,19 @@ if submitted :
     
     col1, col2 = st.columns(2)  # Create two columns
 
+
     with col1:
         afficher_calib("camera 1",cams_Res[0][1] , cams_Res[0][2])
 
     with col2:
         afficher_calib("camera 2",cams_Res[1][1] , cams_Res[1][2])
     
-    with col1:
-        st.subheader("Camera 1 Feed")
-        placeholder1 = st.empty()
-    with col2:
-        st.subheader("Camera 2 Feed")
-        placeholder2 = st.empty()
+    a , b ,c = calculer_mi_distance(cam1_results,cam2_results)
+    st.write(f"la position de camera a mi distance est :({a} , {b} , {c})" )
     # object detection multithreadings"""
-    T1 = threading.Thread(target=object_detection, args=("Camera 1", address_camera1, 1))
-    T2 = threading.Thread(target=object_detection, args=("Camera 2", address_camera2, 2))
+    T1 = threading.Thread(target=object_detection, args=("Camera 1", address_camera1, 1 , cam1_results,cam2_results))
+    T2 = threading.Thread(target=object_detection, args=("Camera 2", address_camera2, 2 , cam1_results,cam2_results))
     T1.start()
     T2.start()
     T1.join()
     T2.join()
-
-    """with coords_lock:
-        if len(coords) < 2:
-            logging.error("Object detection failed for one or both cameras.")
-            exit(1)
-
-        if coords[0][1] == 1:
-            ul, vl = coords[0][0]
-            ur, vr = coords[1][0]
-        else:
-            ul, vl = coords[1][0]
-            ur, vr = coords[0][0]
-
-    fx = cam1_results[1][0, 0]
-    fy = cam1_results[1][1, 1]
-    ox =cam1_results[1][0, 2]
-    oy =cam1_results[1][1, 2]
-
-
-    x,y,z = calculate_3d_position(ul, vl, ur, fx, fy, b, ox, oy)
-    a , b ,c = calculer_mi_distance(cam1_results,cam2_results)
-    print(x,y,z)
-    print(a,b,c)"""
