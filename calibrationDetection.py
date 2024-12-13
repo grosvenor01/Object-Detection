@@ -11,35 +11,9 @@ import threading
 temp = pathlib.PosixPath
 pathlib.PosixPath = pathlib.WindowsPath
 cams_Res=[]
-
-# models loading
-def load_models():
-    model = torch.hub.load('Ultralytics/yolov5', 'custom', "last.pt", force_reload=True, trust_repo=True)
-    return model
-
-# turning the result into a data frame with the predicted volume
-def stacking_results(model_results):
-    try:
-        df = model_results.pandas().xyxy[0]
-        return df
-    except Exception as e:
-        print(f"Error creating DataFrame: {e}")
-        return pd.DataFrame() # Return an empty DataFrame on error
-
-# build the boundings of a specific class
-def boundings_builder(name , image ,  df):
-    if image is None or df.empty:
-        return image
-
-    for _, row in df.iterrows():
-        x1, y1, x2, y2 = row["xmin"], row["ymin"], row["xmax"], row["ymax"]
-        #calculate center coordinates
-        center_x = int((x1 + x2) / 2)
-        center_y = int((y1 + y2) / 2)
-        print(f"X{name} = {center_x}     y{name}= {center_y}")
-        cv2.circle(image, (center_x, center_y), 5, (139, 69, 19), -1) # -1 fills the circle
-
-    return image
+# HSV range for pink (adjust these values if needed)
+lo = np.array([140, 50, 50])  # Lower bound (Hue, Saturation, Value)
+hi = np.array([170, 255, 255])  # Upper bound (Hue, Saturation, Value)
 
 def calibrate_camera(name , http , CHECKERBOARD ,  iteration ):
     # Criteria for corner refinement
@@ -143,25 +117,45 @@ def afficher_calib(mtx,dist):
     print(f"cx = {cx}")
     print(f"cy = {cy}")
 
-def detect_object(name , http):
-    capture = cv2.VideoCapture(http)
-    if not capture.isOpened():
-        print("Error opening video stream.")
-        exit()
-    cv2.namedWindow(name, cv2.WINDOW_NORMAL)
-    cv2.resizeWindow(name, 600, 400)
-    while True:
-        ret, frame = capture.read()
+def detect_inrange(image, surface_min, surface_max):
+    points = []
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    blurred = cv2.GaussianBlur(hsv, (5, 5), 0)  # Gaussian blur is generally better
+    mask = cv2.inRange(blurred, lo, hi)
+
+    # Morphological operations to reduce noise (optional but recommended)
+    kernel = np.ones((5, 5), np.uint8)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)  # Opening (erosion followed by dilation)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel) # Closing (dilation followed by erosion)
+
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours = sorted(contours, key=cv2.contourArea, reverse=True)
+
+    for contour in contours:
+        area = cv2.contourArea(contour)
+        (x, y), radius = cv2.minEnclosingCircle(contour)
+        points.append([int(x), int(y), int(radius), int(area)])
+        
+    return hsv, mask, points
+
+def object_detction(name , http):
+    cap = cv2.VideoCapture(http)
+    while (True):
+        ret, frame = cap.read()
         if not ret:
-            print("Error reading frame.")
             break
-        results = model(frame)
-        df = stacking_results(results)
-        image = boundings_builder(name , frame, df)
-        cv2.imshow(name, image)
-        if cv2.waitKey(1) == ord("q"):
+        cv2.flip(frame, 1, frame)
+        hsv, mask, points = detect_inrange(frame, 200, 300)
+
+        if points:
+            x, y, radius, area = points[0]
+            cv2.circle(frame, (x, y), radius, (0, 0, 255), 2)  # Draw circle
+            cv2.putText(frame, f"{x} , {y}", (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 0), 2)
+
+        cv2.imshow("Mask", mask)
+        cv2.imshow("Image", frame)
+        if cv2.waitKey(10) & 0xFF == ord('q'):
             break
-    time.sleep(10)
 
 
 # initialization
@@ -170,10 +164,7 @@ http2 = 'https://192.168.137.244:8080/video'
 CHECKERBOARD = (9, 7)
 iteration = 10 
 
-# load object detection model detection 
-model = load_models()
-
-# cameras calibration multihthreadings
+"""# cameras calibration multihthreadings
 cam1 = threading.Thread(target=calibrate_camera, args=("cam1" , http1, CHECKERBOARD, 10))
 cam2 = threading.Thread(target=calibrate_camera, args=("cam2",http2, CHECKERBOARD, 10))
 cam1.start()
@@ -185,11 +176,11 @@ cam2.join()
 cam1 = cams_Res[0]
 cam2 = cams_Res[1]
 afficher_calib(cam1[1] , cam1[2])
-afficher_calib(cam2[1] , cam2[2])
+afficher_calib(cam2[1] , cam2[2])"""
 
 # object detection multithreadings
-T1 = threading.Thread(target=detect_object, args=("camera 1" , http1,))
-T2 = threading.Thread(target=detect_object, args=("camera 2" , http2,))
+T1 = threading.Thread(target=object_detction, args=("camera 1" , http1,))
+T2 = threading.Thread(target=object_detction, args=("camera 2" , http2,))
 T1.start()
 T2.start()
 T1.join()
