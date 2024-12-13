@@ -52,7 +52,7 @@ def calibrate_camera(name , http , CHECKERBOARD ,  iteration ):
         current_time = time.time()
 
         # Capture a frame every 3 seconds
-        if current_time - last_capture_time >= 1:
+        if current_time - last_capture_time >= 3:
             last_capture_time = current_time
 
             # Convert the frame to grayscale
@@ -99,7 +99,7 @@ def calibrate_camera(name , http , CHECKERBOARD ,  iteration ):
         if cv2.waitKey(10) & 0xFF == ord('q'):
             break
 
-    cams_Res.append([ret, mtx, dist, rvecs, tvecs])
+    return ret, mtx, dist, rvecs, tvecs
 
 def afficher_calib(camera_name,mtx, dist):
     st.write(f"**Résultats de la calibration - Caméra {camera_name}:**")
@@ -129,7 +129,6 @@ with st.form("parameters"):
     nb_images = st.number_input("Nombre d'images de calibrage", min_value=1, value=10, step=1)
     checkboard_size = st.text_input("Taille du checkboard (ex: '9x6')", value="9x6")
     address_camera1 = st.text_input("Adresse caméra 1 ", value="http://...")
-    address_camera2 = st.text_input("Adresse caméra 2 ", value="http://...")
     submitted = st.form_submit_button("Valider")
 
 
@@ -137,57 +136,6 @@ if submitted :
     CHECKERBOARD = (int(checkboard_size.split("x")[0]), int(checkboard_size.split("x")[1]))
     iteration = nb_images
     b = distance_cameras
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("Camera 1 Feed")
-        placeholder1 = st.empty()
-    with col2:
-        st.subheader("Camera 2 Feed")
-        placeholder2 = st.empty()
 
-    # cameras calibration multihthreadings
-    cam1 = threading.Thread(target=calibrate_camera, args=("cam1" , address_camera1, CHECKERBOARD, iteration))
-    cam2 = threading.Thread(target=calibrate_camera, args=("cam2",address_camera2, CHECKERBOARD, iteration))
-    cam1.start()
-    cam2.start()
-    cam1.join()
-    cam2.join()
-    with cams_res_lock:
-        if len(cams_Res) < 2:
-            logging.error("Camera calibration failed for one or both cameras.")
-            exit(1)
-        cam1_results = cams_Res[0]
-        cam2_results = cams_Res[1]
-    
-    col1, col2 = st.columns(2)  # Create two columns
-
-    with col1:
-        afficher_calib("camera 1",cams_Res[0][1] , cams_Res[0][2])
-
-    with col2:
-        afficher_calib("camera 2",cams_Res[1][1] , cams_Res[1][2])
-    
-    with col1:
-        st.subheader("Camera 1 Feed")
-        placeholder1 = st.empty()
-    with col2:
-        st.subheader("Camera 2 Feed")
-        placeholder2 = st.empty()
-    # object detection multithreadings
-
-    with coords_lock:
-        if len(coords) < 2:
-            logging.error("Object detection failed for one or both cameras.")
-            exit(1)
-
-        if coords[0][1] == 1:
-            ul, vl = coords[0][0]
-            ur, vr = coords[1][0]
-        else:
-            ul, vl = coords[1][0]
-            ur, vr = coords[0][0]
-
-    fx = cam1_results[1][0, 0]
-    fy = cam1_results[1][1, 1]
-    ox =cam1_results[1][0, 2]
-    oy =cam1_results[1][1, 2]
+    calib_result = calibrate_camera("cam1", address_camera1, CHECKERBOARD, iteration)
+    afficher_calib("cam 1" , calib_result[1] , calib_result[2])
