@@ -19,17 +19,17 @@ with st.sidebar:
     )
 
 if selected == "Partie 1":
-    st.title("Partie 1 : Introduction et Prétraitement")
+    st.title("Partie 1 : Détection d'Objets")
     Part1INT.main()
 
 elif selected == "Partie 2":
-    st.title("Partie 2 : Détection d'Objets")
+    st.title("Partie 2 : Calibrage de la caméra")
     Part2INT.main()
 
 elif selected == "Partie 3":
-    st.title("Partie 3 : Suivi et Analyse")
+    st.title("Partie 3 : Calcul de la position et de la distance d’un objet")
     Part3INT.main()
 
 elif selected == "Partie 4":
-    st.title("Partie 4 : Améliorations et Visualisation")
+    st.title("Partie 4 : Améliorations")
     Part4INT.main()

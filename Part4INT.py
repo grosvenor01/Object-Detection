@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 trajectory = []  # Store trajectory points
 trajectory_lock = threading.Lock()
 
-# HSV range for pink
+# HSV pour la couleur rose
 lo = np.array([140, 50, 50])  # Lower bound (Hue, Saturation, Value)
 hi = np.array([170, 255, 255])  # Upper bound (Hue, Saturation, Value)
 import cv2
@@ -22,7 +22,7 @@ import threading
 import queue
 
 # Charger le modèle YOLOv8 pré-entraîné
-model = YOLO('yolov8s.pt')  # 'yolov8s.pt' est un modèle léger pour la détection rapide
+model = YOLO('yolov8s.pt')
 # Capture vidéo
 videoCap = cv2.VideoCapture(0)
 
@@ -83,7 +83,7 @@ def detect_and_track(image):
 
     for contour in contours:
         area = cv2.contourArea(contour)
-        if area < 200:  # Ignore small noise contours
+        if area < 200:
             continue
 
         (x, y), radius = cv2.minEnclosingCircle(contour)
@@ -92,7 +92,7 @@ def detect_and_track(image):
     # Track trajectory
     if points:
         with trajectory_lock:
-            trajectory.append((points[0][0], points[0][1]))  # Append only the largest object's center
+            trajectory.append((points[0][0], points[0][1]))
 
     return mask, points
 
@@ -137,12 +137,11 @@ def object_tracking(name, http):
     cv2.destroyAllWindows()
 
 def main():
-    st.title("Single-Camera Object Tracking with Trajectory")
 
     # Input form
     with st.form("parameters"):
-        address_camera = st.text_input("Camera Address", value="http://...")
-        functionality = st.selectbox("FUNC", ["Tracking" , "Distance between two objects" , "diffrent obj detection and heatmap"])
+        address_camera = st.text_input("Adresse de la caméra", value="http://...")
+        functionality = st.selectbox("Fonctionnalité", ["Tracking" , "Distance entre 2 objets" , "Détection de types d'objet et Heatmap"])
         submitted = st.form_submit_button("Start")
 
     if submitted:
@@ -150,7 +149,7 @@ def main():
             tracking_thread = threading.Thread(target=object_tracking, args=("Camera", address_camera))
             tracking_thread.start()
         
-        elif functionality == "diffrent obj detection and heatmap":
+        elif functionality == "Détection de types d'objet et Heatmap":
             # Démarrer le thread de capture
             capture_thread = threading.Thread(target=capture_frames, daemon=True)
             capture_thread.start()
@@ -228,7 +227,7 @@ def main():
             videoCap.release()
             cv2.destroyAllWindows()
         
-        elif functionality == "Distance between two objects": 
-            pass 
+        elif functionality == "Distance entre 2 objets": 
+            pass
 
 

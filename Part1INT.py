@@ -120,14 +120,13 @@ def Yolo_detection(address):
     cv2.destroyAllWindows()
 
 def main():
-    st.header("Partie 1 : Détection d'objets")
     with st.form("parameters"):
         address_camera1 = st.text_input("Adresse caméra 1 ", value="http://...")
-        models_to_use = st.selectbox("choose the model", ["Color detection" , "YOLO"])
+        models_to_use = st.selectbox("Modèle", ["Détection de couleur" , "YOLO"])
         submitted = st.form_submit_button("Valider")
 
     if submitted:
-        if models_to_use == "Color detection":
+        if models_to_use == "Détection de couleur":
             points_history = [[], []] #Initialize history for two cameras
             T1 = threading.Thread(target=object_detection_color, args=("Camera 1", address_camera1, 1, points_history))
             T1.start()

@@ -320,7 +320,6 @@ def Yolo_detection(address):
             break
 
 def main():
-    st.title("Calibration Caméras")
     # Input parameters
     with st.form("parameters"):
         distance_cameras = st.number_input("Distance entre les caméras (en mètres)", min_value=0.0, value=1.0, step=0.1, format="%.1f")
@@ -328,8 +327,8 @@ def main():
         checkboard_size = st.text_input("Taille du checkboard (ex: '9x7')", value="9x7")
         address_camera1 = st.text_input("Adresse caméra 1 ", value="http://...")
         address_camera2 = st.text_input("Adresse caméra 2 ", value="http://...")
-        model_case = st.selectbox("calibration type" , ["fixe object" , "fixe camera"])
-        model_used = st.selectbox("calibration type" , ["Color Detection" , "YOLO"])
+        model_case = st.selectbox("Type de calibration" , ["Objet fixe" , "Caméra fixe"])
+        model_used = st.selectbox("Modèle" , ["Détection de couleurs" , "YOLO"])
         submitted = st.form_submit_button("Valider")
 
 
@@ -340,10 +339,10 @@ def main():
         b = distance_cameras
         col1, col2 = st.columns(2)
         with col1:
-            st.subheader("Camera 1 Feed")
+            st.subheader("Camera 1")
             placeholder1 = st.empty()
         with col2:
-            st.subheader("Camera 2 Feed")
+            st.subheader("Camera 2")
             placeholder2 = st.empty()
 
         # cameras calibration multihthreadings
@@ -357,7 +356,7 @@ def main():
 
         with cams_res_lock:
             if len(cams_Res) < 2:
-                logging.error("Camera calibration failed for one or both cameras.")
+                logging.error("La calibration de caméras a échoue pour l'une ou les deux caméras")
                 exit(1)
             cam1_results = cams_Res[0]
             cam2_results = cams_Res[1]

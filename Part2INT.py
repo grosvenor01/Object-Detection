@@ -123,7 +123,6 @@ def afficher_calib(camera_name,mtx, dist):
     st.write(f"- cy = {cy:.2f}")
 
 def main():
-    st.header("Partie 2 : Calibrage de la caméra")
     st.title("Calibration Caméras")
     # Input parameters
     with st.form("parameters"):
