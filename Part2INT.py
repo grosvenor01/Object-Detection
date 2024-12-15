@@ -127,7 +127,7 @@ st.title("Calibration Caméras")
 with st.form("parameters"):
     distance_cameras = st.number_input("Distance entre les caméras (en mètres)", min_value=0.0, value=1.0, step=0.1, format="%.1f")
     nb_images = st.number_input("Nombre d'images de calibrage", min_value=1, value=10, step=1)
-    checkboard_size = st.text_input("Taille du checkboard (ex: '9x6')", value="9x6")
+    checkboard_size = st.text_input("Taille du checkboard (ex: '9x7')", value="9x7")
     address_camera1 = st.text_input("Adresse caméra 1 ", value="http://...")
     submitted = st.form_submit_button("Valider")
 

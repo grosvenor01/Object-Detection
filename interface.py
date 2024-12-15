@@ -201,7 +201,7 @@ def object_detection(name, http, num, cam1_results, cam2_results):
                     b = distance_cameras 
 
                     x1, y1, z = calculate_3d_position(ul, vl, ur, fx, fy, b, ox, oy)
-                    cv2.putText(frame, f"{x1:.2f}, {y1:.2f}, {z:.2f}", (x+20 , y+20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+                    cv2.putText(frame, f"{x:.2f}, {y:.2f}, {z:.2f}", (x+20 , y+20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
 
         cv2.imshow(f"Image : {name}", frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -293,7 +293,7 @@ if submitted :
     a , b ,c = calculer_mi_distance(cam1_results,cam2_results)
     st.write(f"la position de camera a mi distance est :({a} , {b} , {c})" )
 
-    if model_case == "fixe camera":
+    if model_case == "fixe object":
         def monitor_and_recalibrate(camera_name, address, cam_results, cam_index):
             reference_frame = None
             
