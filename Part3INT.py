@@ -7,7 +7,8 @@ import time
 import threading
 import streamlit as st
 import logging
-
+import torch
+import pandas as pd
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -30,7 +31,7 @@ hi = np.array([170, 255, 255])  # Upper bound (Hue, Saturation, Value)
 
 def calculate_3d_position(uL, vL, uR, fx, fy, b, ox, oy):
     if uL == uR:
-        raise ValueError("uL and uR cannot be the same value to avoid division by zero.")
+        uL = uL +0.05
     x = b * (uL - ox) / (uL - uR)
     y = b * fx * (vL - oy) / (fy * (uL - uR))
     z = b * fx / (uL - uR)
@@ -160,7 +161,7 @@ def detect_inrange(image, surface_min, surface_max):
         
     return hsv, mask, points
 
-def object_detection(name, http, num, cam1_results, cam2_results):
+def object_detection_color(name, http, num, cam1_results, cam2_results):
     global pos_cam1
     global pos_cam2
     cap = cv2.VideoCapture(http)
@@ -238,17 +239,93 @@ def check_camera_moved(reference_frame, current_frame, threshold=20):
     print(f"{avg_distance} , {threshold}")
     # Si la distance moyenne dépasse le seuil, la caméra a bougé
     return avg_distance > threshold
-    
+
+
+# Load model once at the start
+def load_models():
+    try:
+        # Load model
+        model = torch.hub.load('ultralytics/yolov5', 'custom', 'last.pt', force_reload=True, trust_repo=True)
+        return model
+    except Exception as e:
+        print(f"Error loading model: {e}")
+        return None
+
+# Function to convert model results to DataFrame
+def stacking_results(model_results):
+    return model_results.pandas().xyxy[0] if model_results else pd.DataFrame()
+
+def boundings_builder(image, df):
+    if image is None or df.empty:
+        return image
+
+    # Separate detections into class 0 and class 1
+    class_0 = df[df["class"] == 0]
+    class_1 = df[df["class"] == 1]
+
+    if class_0.empty or class_1.empty:
+        # If either class is not detected, just draw bounding boxes
+        for _, row in df.iterrows():
+            x1, y1, x2, y2 = int(row["xmin"]), int(row["ymin"]), int(row["xmax"]), int(row["ymax"])
+            cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        return image
+
+    # Get center coordinates of class 0 and class 1 objects
+    centers_0 = [(int((row["xmin"] + row["xmax"]) / 2), int((row["ymin"] + row["ymax"]) / 2)) for _, row in class_0.iterrows()]
+    centers_1 = [(int((row["xmin"] + row["xmax"]) / 2), int((row["ymin"] + row["ymax"]) / 2)) for _, row in class_1.iterrows()]
+
+    # Draw bounding boxes for all objects
+    for _, row in df.iterrows():
+        x1, y1, x2, y2 = int(row["xmin"]), int(row["ymin"]), int(row["xmax"]), int(row["ymax"])
+        cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+    # Calculate relative coordinates for each class 1 object with respect to the nearest class 0
+    for (x1, y1) in centers_1:
+        # Find the nearest class 0 object
+        nearest_0 = min(centers_0, key=lambda c0: ((x1 - c0[0]) ** 2 + (y1 - c0[1]) ** 2))
+
+        # Calculate relative coordinates
+        relative_x = x1 - nearest_0[0]
+        relative_y = y1 - nearest_0[1]
+
+        # Display relative coordinates on the image
+        cv2.putText(image, f"Rel: ({relative_x}, {relative_y})", (x1 + 10, y1 - 10),cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+
+    return image
+
+def Yolo_detection(address):
+    model = load_models()
+    capture = cv2.VideoCapture(address)
+    if not capture.isOpened():
+        print("Error opening video stream.")
+        exit()
+    while True:
+        ret, frame = capture.read()
+        if not ret:
+            print("Error reading frame.")
+            break
+        # Object detection using YOLOv5 model
+        results = model(frame)  # Use the pre-loaded model
+        df = stacking_results(results)  # Convert results to a DataFrame
+        frame_with_bounding = boundings_builder(frame, df)  # Draw bounding boxes and centers
+        # Resize image if necessary (to fit within a small window)
+        frame_resized = cv2.resize(frame_with_bounding, (800, 450))
+        # Display the processed frame
+        cv2.imshow(f"livestreem", frame_resized)
+        # Exit on pressing 'q'
+        if cv2.waitKey(1) == ord("q"):
+            break
 
 st.title("Calibration Caméras")
 # Input parameters
 with st.form("parameters"):
     distance_cameras = st.number_input("Distance entre les caméras (en mètres)", min_value=0.0, value=1.0, step=0.1, format="%.1f")
     nb_images = st.number_input("Nombre d'images de calibrage", min_value=1, value=10, step=1)
-    checkboard_size = st.text_input("Taille du checkboard (ex: '9x6')", value="9x6")
+    checkboard_size = st.text_input("Taille du checkboard (ex: '9x7')", value="9x7")
     address_camera1 = st.text_input("Adresse caméra 1 ", value="http://...")
     address_camera2 = st.text_input("Adresse caméra 2 ", value="http://...")
     model_case = st.selectbox("calibration type" , ["fixe object" , "fixe camera"])
+    model_used = st.selectbox("calibration type" , ["Color Detection" , "YOLO"])
     submitted = st.form_submit_button("Valider")
 
 
@@ -327,9 +404,14 @@ if submitted :
         threading.Thread(target=monitor_and_recalibrate, args=("cam2", address_camera2, cam2_results, 1), daemon=True).start()
         
     # object detection multithreadings"""
-    T1 = threading.Thread(target=object_detection, args=("Camera 1", address_camera1, 1 , cam1_results,cam2_results))
-    T2 = threading.Thread(target=object_detection, args=("Camera 2", address_camera2, 2 , cam1_results,cam2_results))
-    T1.start()
-    T2.start()
-    T1.join()
-    T2.join()
+    if model_used == "YOLO":
+        T1 = threading.Thread(target=Yolo_detection, args=(address_camera1,) , daemon=True)
+        T1.start()
+        T1.join()
+    else :
+        T1 = threading.Thread(target=object_detection_color, args=("Camera 1", address_camera1, 1 , cam1_results,cam2_results))
+        T2 = threading.Thread(target=object_detection_color, args=("Camera 2", address_camera2, 2 , cam1_results,cam2_results))
+        T1.start()
+        T2.start()
+        T1.join()
+        T2.join()
